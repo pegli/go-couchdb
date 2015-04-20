@@ -65,7 +65,7 @@ func (c *Client) SetAuth(a Auth) {
 // already exists. A valid DB object is returned in all cases, even if the
 // request fails.
 func (c *Client) CreateDB(name string) (*DB, error) {
-	if _, err := c.closedRequest("PUT", path(name), nil); err != nil {
+	if _, err := c.closedRequest("PUT", path(encid(name)), nil); err != nil {
 		return c.DB(name), err
 	}
 	return c.DB(name), nil
@@ -124,20 +124,7 @@ var getJsonKeys = []string{"open_revs", "atts_since"}
 //
 // http://docs.couchdb.org/en/latest/api/document/common.html?highlight=doc#get--db-docid
 func (db *DB) Get(id string, doc interface{}, opts Options) error {
-	// issue #1: slashes in document IDs need to be escaped.
-	// ref: http://wiki.apache.org/couchdb/HTTP_Document_API#line-75
-	const DDOC_PREFIX = "_design"
-	segments := strings.Split(id, "/")
-	if len(segments) > 1 {
-		if segments[0] == DDOC_PREFIX {
-			// preferred encoding for design docs is _design/seg1%2Fseg2
-			id = segments[0] + "/" + strings.Join(segments[1:], "%2F")
-		} else {
-			id = strings.Join(segments, "%2F")
-		}
-	}
-
-	path, err := optpath(opts, getJsonKeys, db.name, id)
+	path, err := optpath(opts, getJsonKeys, encid(db.name), encid(id))
 	if err != nil {
 		return err
 	}
@@ -152,12 +139,12 @@ func (db *DB) Get(id string, doc interface{}, opts Options) error {
 // It is faster than an equivalent Get request because no body
 // has to be parsed.
 func (db *DB) Rev(id string) (string, error) {
-	return responseRev(db.closedRequest("HEAD", path(db.name, id), nil))
+	return responseRev(db.closedRequest("HEAD", path(encid(db.name), encid(id)), nil))
 }
 
 // Put stores a document into the given database.
 func (db *DB) Put(id string, doc interface{}, rev string) (newrev string, err error) {
-	path := revpath(rev, db.name, id)
+	path := revpath(rev, encid(db.name), encid(id))
 	// TODO: make it possible to stream encoder output somehow
 	json, err := json.Marshal(doc)
 	if err != nil {
@@ -200,7 +187,7 @@ func (db *DB) Post(doc interface{}) (docid, newrev string, err error) {
 
 // Delete marks a document revision as deleted.
 func (db *DB) Delete(id, rev string) (newrev string, err error) {
-	path := revpath(rev, db.name, id)
+	path := revpath(rev, encid(db.name), encid(id))
 	return responseRev(db.closedRequest("DELETE", path, nil))
 }
 
@@ -219,7 +206,7 @@ type Members struct {
 // Security retrieves the security object of a database.
 func (db *DB) Security() (*Security, error) {
 	secobj := new(Security)
-	resp, err := db.request("GET", path(db.name, "_security"), nil)
+	resp, err := db.request("GET", path(encid(db.name), "_security"), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -237,7 +224,7 @@ func (db *DB) Security() (*Security, error) {
 func (db *DB) PutSecurity(secobj *Security) error {
 	json, _ := json.Marshal(secobj)
 	body := bytes.NewReader(json)
-	_, err := db.request("PUT", path(db.name, "_security"), body)
+	_, err := db.request("PUT", path(encid(db.name), "_security"), body)
 	return err
 }
 
@@ -257,7 +244,7 @@ func (db *DB) View(ddoc, view string, result interface{}, opts Options) error {
 	if !strings.HasPrefix(ddoc, "_design/") {
 		return errors.New("couchdb.View: design doc name must start with _design/")
 	}
-	path, err := optpath(opts, viewJsonKeys, db.name, ddoc, "_view", view)
+	path, err := optpath(opts, viewJsonKeys, encid(db.name), ddoc, "_view", encid(view))
 	if err != nil {
 		return err
 	}
@@ -277,7 +264,7 @@ func (db *DB) View(ddoc, view string, result interface{}, opts Options) error {
 //
 // http://docs.couchdb.org/en/latest/api/database/bulk-api.html#db-all-docs
 func (db *DB) AllDocs(result interface{}, opts Options) error {
-	path, err := optpath(opts, viewJsonKeys, db.name, "_all_docs")
+	path, err := optpath(opts, viewJsonKeys, encid(db.name), "_all_docs")
 	if err != nil {
 		return err
 	}
